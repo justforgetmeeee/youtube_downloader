@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Downloader</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 500px;
+            position: relative; /* Для позиционирования превью */
+        }
+        h1 {
+            font-size: 2rem;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 1.5rem;
+            color: #2c3e50;
+        }
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        input[type="text"] {
+            padding: 0.75rem;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.3s ease;
+        }
+        input[type="text"]:focus {
+            border-color: #3498db;
+            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2);
+        }
+        button {
+            background: #3498db;
+            color: white;
+            padding: 0.75rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+        button:hover {
+            background: #2980b9;
+        }
+        #history {
+            margin-top: 2rem;
+        }
+        .history-item {
+            background: #f9f9f9;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
+            cursor: pointer;
+            transition: background 0.3s ease, transform 0.2s ease;
+            position: relative;
+        }
+        .history-item:hover {
+            background: #f1f1f1;
+            transform: translateY(-2px);
+        }
+        .delete-button {
+            position: absolute;
+            right: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            background: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 0.25rem 0.5rem;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        .history-item:hover .delete-button {
+            opacity: 1;
+        }
+        /* Стили для статичного превью */
+        #preview-container {
+            display: none;
+            position: absolute;
+            top: 10rem; /* Позиция сверху */
+            left: 1rem; /* Позиция справа */
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 0.5rem;
+            z-index: 1000;
+            max-width: 200px; /* Ограничение по ширине */
+        }
+        #preview-image {
+            max-width: 100%;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>YouTube Downloader</h1>
+        <div class="input-group">
+            <input id="url" type="text" placeholder="Enter YouTube URL">
+            <button id="download-video">Download Video (.mp4)</button>
+            <button id="download-audio">Download Audio (.mp3)</button>
+        </div>
+
+        <h2>History</h2>
+        <div id="history"></div>
+
+        <!-- Контейнер для статичного превью -->
+        <div id="preview-container">
+            <img id="preview-image" src="" alt="Video Preview">
+        </div>
+    </div>
+
+    <script>
+        const urlInput = document.getElementById('url');
+        const downloadVideoButton = document.getElementById('download-video');
+        const downloadAudioButton = document.getElementById('download-audio');
+        const historyDiv = document.getElementById('history');
+        const previewContainer = document.getElementById('preview-container');
+        const previewImage = document.getElementById('preview-image');
+
+        // Функция для получения превью видео
+        function getVideoThumbnail(url) {
+            if (!url || typeof url !== 'string') {
+                console.error('Invalid URL:', url);
+                return ''; // Возвращаем пустую строку, если URL невалиден
+            }
+
+            try {
+                const videoId = new URL(url).searchParams.get('v');
+                return `https://img.youtube.com/vi/${videoId}/0.jpg`;
+            } catch (error) {
+                console.error('Error parsing URL:', error);
+                return ''; // Возвращаем пустую строку в случае ошибки
+            }
+        }
+
+        // Функция для отображения истории
+        const renderHistory = async () => {
+            const history = await window.electron.getHistory();
+            historyDiv.innerHTML = history.map(item => `
+                <div class="history-item" 
+                     onmouseover="showPreview('${item.url}')" 
+                     onmouseout="hidePreview()">
+                    ${item.title}
+                    <button class="delete-button" onclick="deleteHistoryItem(event, '${item.url}')">Delete</button>
+                </div>
+            `).join('');
+        };
+
+        // Показать превью
+        function showPreview(url) {
+            const thumbnailUrl = getVideoThumbnail(url);
+            if (thumbnailUrl) {
+                previewImage.src = thumbnailUrl;
+                previewContainer.style.display = 'block';
+            }
+        }
+
+        // Скрыть превью
+        function hidePreview() {
+            previewContainer.style.display = 'none';
+        }
+
+        // Удалить элемент истории
+        async function deleteHistoryItem(event, url) {
+            event.stopPropagation(); // Останавливаем всплытие события
+
+            // Проверяем, связано ли текущее превью с удаляемым элементом
+            if (previewImage.src === getVideoThumbnail(url)) {
+                hidePreview(); // Скрываем превью, если оно отображает удаляемый элемент
+            }
+
+            const updatedHistory = await window.electron.deleteHistoryItem(url);
+            renderHistory(); // Обновляем интерфейс
+        }
+
+        // Загрузка видео
+downloadVideoButton.addEventListener('click', async () => {
+    const url = urlInput.value;
+    if (url) {
+        try {
+            const outputPath = await window.electron.downloadVideo(url, 'video');
+            await renderHistory();
+            window.electron.openFolder(outputPath);
+        } catch (error) {
+            alert(`Error: ${error.message}`);
+        }
+    } else {
+        alert('Please enter a valid YouTube URL.');
+    }
+});
+
+        // Загрузка аудио
+downloadAudioButton.addEventListener('click', async () => {
+    const url = urlInput.value;
+    if (url) {
+        try {
+            const outputPath = await window.electron.downloadVideo(url, 'audio');
+            await renderHistory();
+            window.electron.openFolder(outputPath);
+        } catch (error) {
+            alert(`Error: ${error.message}`);
+        }
+    } else {
+        alert('Please enter a valid YouTube URL.');
+    }
+});
+
+        // Инициализация истории
+        renderHistory();
+    </script>
+</body>
+</html>
